@@ -244,58 +244,56 @@ public class MediaProvider extends ContentProvider {
                 } else {
                     // If secondary external storage is ejected, then we delete all database
                     // entries for that storage from the files table.
-
-                    // Don't delete entries if the eject is due to a shutdown
-                    if (!"".equals(SystemProperties.get("sys.shutdown.requested"))) {
-                        Log.d(TAG, "not deleting entries on eject due to shtudown");
-                        return;
-                    }
-
-                    DatabaseHelper database;
                     synchronized (mDatabases) {
-                        database = mDatabases.get(EXTERNAL_VOLUME);
-                    }
-                    Uri uri = Uri.parse("file://" + storage.getPath());
-                    if (database != null) {
-                        try {
-                            // Send media scanner started and stopped broadcasts for apps that rely
-                            // on these Intents for coarse grained media database notifications.
-                            context.sendBroadcast(
-                                    new Intent(Intent.ACTION_MEDIA_SCANNER_STARTED, uri));
+                        // Don't delete entries if the eject is due to a shutdown
+                        if (!"".equals(SystemProperties.get("sys.shutdown.requested"))) {
+                            Log.d(TAG, "not deleting entries on eject due to shtudown");
+                            return;
+                        }
 
-                            // don't send objectRemoved events - MTP be sending StorageRemoved anyway
-                            mDisableMtpObjectCallbacks = true;
-                            Log.d(TAG, "deleting all entries for storage " + storage);
-                            SQLiteDatabase db = database.getWritableDatabase();
-                            // First clear the file path to disable the _DELETE_FILE database hook.
-                            // We do this to avoid deleting files if the volume is remounted while
-                            // we are still processing the unmount event.
-                            ContentValues values = new ContentValues();
-                            values.put(Files.FileColumns.DATA, "");
-                            String where = FileColumns.STORAGE_ID + "=?";
-                            String[] whereArgs = new String[] { Integer.toString(storage.getStorageId()) };
-                            database.mNumUpdates++;
-                            db.update("files", values, where, whereArgs);
-                            // now delete the records
-                            database.mNumDeletes++;
-                            int numpurged = db.delete("files", where, whereArgs);
-                            logToDb(db, "removed " + numpurged +
-                                    " rows for ejected filesystem " + storage.getPath());
-                            // notify on media Uris as well as the files Uri
-                            context.getContentResolver().notifyChange(
-                                    Audio.Media.getContentUri(EXTERNAL_VOLUME), null);
-                            context.getContentResolver().notifyChange(
-                                    Images.Media.getContentUri(EXTERNAL_VOLUME), null);
-                            context.getContentResolver().notifyChange(
-                                    Video.Media.getContentUri(EXTERNAL_VOLUME), null);
-                            context.getContentResolver().notifyChange(
-                                    Files.getContentUri(EXTERNAL_VOLUME), null);
-                        } catch (Exception e) {
-                            Log.e(TAG, "exception deleting storage entries", e);
-                        } finally {
-                            context.sendBroadcast(
-                                    new Intent(Intent.ACTION_MEDIA_SCANNER_FINISHED, uri));
-                            mDisableMtpObjectCallbacks = false;
+                        DatabaseHelper database = mDatabases.get(EXTERNAL_VOLUME);
+                        Uri uri = Uri.parse("file://" + storage.getPath());
+                        if (database != null) {
+                            try {
+                                // Send media scanner started and stopped broadcasts for apps that rely
+                                // on these Intents for coarse grained media database notifications.
+                                context.sendBroadcast(
+                                        new Intent(Intent.ACTION_MEDIA_SCANNER_STARTED, uri));
+
+                                // don't send objectRemoved events - MTP be sending StorageRemoved anyway
+                                mDisableMtpObjectCallbacks = true;
+                                Log.d(TAG, "deleting all entries for storage " + storage);
+                                SQLiteDatabase db = database.getWritableDatabase();
+                                // First clear the file path to disable the _DELETE_FILE database hook.
+                                // We do this to avoid deleting files if the volume is remounted while
+                                // we are still processing the unmount event.
+                                ContentValues values = new ContentValues();
+                                values.put(Files.FileColumns.DATA, "");
+                                String where = FileColumns.STORAGE_ID + "=?";
+                                String[] whereArgs = new String[] { Integer.toString(storage.getStorageId()) };
+                                database.mNumUpdates++;
+                                db.update("files", values, where, whereArgs);
+                                // now delete the records
+                                database.mNumDeletes++;
+                                int numpurged = db.delete("files", where, whereArgs);
+                                logToDb(db, "removed " + numpurged +
+                                        " rows for ejected filesystem " + storage.getPath());
+                                // notify on media Uris as well as the files Uri
+                                context.getContentResolver().notifyChange(
+                                        Audio.Media.getContentUri(EXTERNAL_VOLUME), null);
+                                context.getContentResolver().notifyChange(
+                                        Images.Media.getContentUri(EXTERNAL_VOLUME), null);
+                                context.getContentResolver().notifyChange(
+                                        Video.Media.getContentUri(EXTERNAL_VOLUME), null);
+                                context.getContentResolver().notifyChange(
+                                        Files.getContentUri(EXTERNAL_VOLUME), null);
+                            } catch (Exception e) {
+                                Log.e(TAG, "exception deleting storage entries", e);
+                            } finally {
+                                context.sendBroadcast(
+                                        new Intent(Intent.ACTION_MEDIA_SCANNER_FINISHED, uri));
+                                mDisableMtpObjectCallbacks = false;
+                            }
                         }
                     }
                 }
@@ -614,17 +612,6 @@ public class MediaProvider extends ContentProvider {
                             File origFile = new File(mCurrentThumbRequest.mPath);
                             if (origFile.exists() && origFile.length() > 0) {
                                 mCurrentThumbRequest.execute();
-                                // Check if more requests for the same image are queued.
-                                synchronized (mMediaThumbQueue) {
-                                    for (MediaThumbRequest mtq : mMediaThumbQueue) {
-                                        if ((mtq.mOrigId == mCurrentThumbRequest.mOrigId) &&
-                                            (mtq.mIsVideo == mCurrentThumbRequest.mIsVideo) &&
-                                            (mtq.mMagic == 0) &&
-                                            (mtq.mState == MediaThumbRequest.State.WAIT)) {
-                                            mtq.mMagic = mCurrentThumbRequest.mMagic;
-                                        }
-                                    }
-                                }
                             } else {
                                 // original file hasn't been stored yet
                                 synchronized (mMediaThumbQueue) {

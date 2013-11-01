@@ -30,6 +30,9 @@ import android.os.Handler;
 import android.provider.Settings;
 import android.util.Log;
 
+import java.io.File;
+import java.io.IOException;
+
 public class MediaScannerReceiver extends BroadcastReceiver {
     private final static int BOOT_SCAN_ENABLE = 0;
     private final static int BOOT_SCAN_ASK = 1;
@@ -80,20 +83,29 @@ public class MediaScannerReceiver extends BroadcastReceiver {
         } else if (DISMISS_SCAN.equals(action)) {
             removeAsk(context, DELAY_MS);
         } else {
-            if (!checkAsk(context)) {
-                if (uri.getScheme().equals("file")) {
-                    // handle intents related to external storage
-                    String path = uri.getPath();
-                    String externalStoragePath = Environment.getExternalStorageDirectory().getPath();
+            if (uri.getScheme().equals("file")) {
+                // handle intents related to external storage
+                String path = uri.getPath();
+                String externalStoragePath = Environment.getExternalStorageDirectory().getPath();
+                String legacyPath = Environment.getLegacyExternalStorageDirectory().getPath();
 
-                    Log.d(TAG, "action: " + action + " path: " + path);
-                    if (Intent.ACTION_MEDIA_MOUNTED.equals(action)) {
-                        // scan whenever any volume is mounted
-                        scan(context, MediaProvider.EXTERNAL_VOLUME);
-                    } else if (Intent.ACTION_MEDIA_SCANNER_SCAN_FILE.equals(action) &&
-                            path != null && path.startsWith(externalStoragePath + "/")) {
-                        scanFile(context, path);
-                    }
+                try {
+                    path = new File(path).getCanonicalPath();
+                } catch (IOException e) {
+                    Log.e(TAG, "couldn't canonicalize " + path);
+                    return;
+                }
+                if (path.startsWith(legacyPath)) {
+                    path = externalStoragePath + path.substring(legacyPath.length());
+                }
+
+                Log.d(TAG, "action: " + action + " path: " + path);
+                if (Intent.ACTION_MEDIA_MOUNTED.equals(action)) {
+                    // scan whenever any volume is mounted
+                    scan(context, MediaProvider.EXTERNAL_VOLUME);
+                } else if (Intent.ACTION_MEDIA_SCANNER_SCAN_FILE.equals(action) &&
+                        path != null && path.startsWith(externalStoragePath + "/")) {
+                    scanFile(context, path);
                 }
             }
         }

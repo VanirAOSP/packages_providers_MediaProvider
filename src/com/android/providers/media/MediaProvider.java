@@ -2354,7 +2354,13 @@ public class MediaProvider extends ContentProvider {
             return null;
         }
         helper.mNumQueries++;
-        SQLiteDatabase db = helper.getReadableDatabase();
+        SQLiteDatabase db = null;
+        try {
+            db = helper.getReadableDatabase();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
         if (db == null) return null;
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
         String limit = uri.getQueryParameter("limit");
@@ -4297,10 +4303,7 @@ public class MediaProvider extends ContentProvider {
                     // Do not allow deletion if the file/object is referenced as parent
                     // by some other entries. It could cause database corruption.
                     if (!TextUtils.isEmpty(sGetTableAndWhereParam.where)) {
-                        sGetTableAndWhereParam.where =
-                                "(" + sGetTableAndWhereParam.where + ")" +
-                                        " AND (_id NOT IN (SELECT parent FROM files" +
-                                        " WHERE NOT (" + sGetTableAndWhereParam.where + ")))";
+                        sGetTableAndWhereParam.where += " AND (" + ID_NOT_PARENT_CLAUSE + ")";
                     } else {
                         sGetTableAndWhereParam.where = ID_NOT_PARENT_CLAUSE;
                     }
@@ -5070,6 +5073,10 @@ public class MediaProvider extends ContentProvider {
     private static byte[] getCompressedAlbumArt(Context context, String[] rootPaths, String path) {
         byte[] compressed = null;
 
+        //When playing Music,plug out the SD card to cause this case.
+        if (path == null) {
+            return null;
+        }
         try {
             File f = new File(path);
             ParcelFileDescriptor pfd = ParcelFileDescriptor.open(f,
